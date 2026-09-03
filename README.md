@@ -38,9 +38,6 @@ compositor**.
    - Start SteamVR and it should automatically switch over to the game in your headset.
    - Start a song and enjoy!
 
-> **Tip:** in YARG → Settings → Graphics, set **Venue FPS Cap** to *unlimited/0* so the stage view
-> refreshes at your HMD refresh rate (the venue texture is YARG's own render target).
-
 ## Hotkeys (defaults)
 
 | Key | Action |
