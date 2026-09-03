@@ -1,7 +1,5 @@
 # YARG-VR
 
-# **ALL OF THE BELOW IS A PLACEHOLDER, I WILL FIX IT LATER, IGNORE ALL OF IT.**
-
 **Play [YARG](https://yarg.in) (Yet Another Rhythm Game) in VR — with SteamVR (OpenVR) + MelonLoader,
 by touching nothing but the game's cameras.**
 
@@ -18,7 +16,7 @@ compositor**.
 ## Requirements
 
 | | |
-|---|---|
+|-|-|
 | Game | YARG **v0.15.0** (Windows x64) — https://github.com/YARC-Official/YARG/releases |
 | Loader | **MelonLoader 0.6.x / 0.7.x** (x64) |
 | VR runtime | **SteamVR** installed (headset: Index, Quest/Pico via Link/Virtual Desktop/Steam Link, Vive, WMR, … anything SteamVR supports) |
@@ -33,18 +31,10 @@ compositor**.
 2. **Install the mod**:
    - Copy **`YARG-VR.dll`** and **`openvr_api.dll`** into `YARG/Mods/`.
 3. Launch:
-   - Start **SteamVR** first (or launch YARG and the mod waits for it, retrying every 3 s).
-   - Start YARG. The MelonLoader console should show
-     `[YARG-VR] OpenVR initialized`, `Eye offsets: L/R ... IPD ... mm`, `YARG-VR 1.2.1 initialized
-     (true stereo).` plus a `Screen mode: room-locked ...` line, and — once the VR view engages —
-     `*** HMD tracking is live ***`,
-     `*** Compositor accepted the first LEFT eye frame ***` /
-     `*** ... RIGHT eye frame - stereo is live ***`, `Desktop mirror enabled - the monitor now
-     shows the headset view.`, and `Visualizer tapped YARG's audio mixer (BASS FFT)` once music
-     is playing. Once a song's stage exists you'll also see `Found 'Venue Output' - stereo stage
-     enabled.` (songs with **chart video backgrounds** instead log `Chart video background hooked
-     - it now renders on the VR screen too.`).
-   - Start a song — the headset shows the stage; look around. 🎸🥁🎤
+   - Start YARG.
+   - Connect an instrument to YARG (or steam will mute the controllers inputs and replace it with your VR controllers).
+   - Start SteamVR and it should automatically switch over to the game in your headset.
+   - Start a song and enjoy!
 
 > **Tip:** in YARG → Settings → Graphics, set **Venue FPS Cap** to *unlimited/0* so the stage view
 > refreshes at your HMD refresh rate (the venue texture is YARG's own render target).
@@ -110,48 +100,6 @@ HeightOffset = 0          # meters of extra height for the stage camera
 - **Performance:** the stage is rendered twice (once per eye) at your desktop resolution and the
   game screen once per eye at compositor resolution. If it's heavy, set `StereoVenue = false`,
   lower YARG's *Venue Render Scale*, or lower `Supersample` to `0.9`–`1.0`.
-
-### Streaming tuning (Quest-class hardware)
-
-1. Install the streamer on the PC + the app on the Quest; connect (SteamVR starts).
-2. Launch YARG with MelonLoader + the mod while SteamVR is running — no extra configuration needed.
-3. For smoother streaming:
-   - Set `StereoVenue = false` (biggest saving — stage renders once) and keep `Supersample = 1.0`.
-   - In YARG → Settings → Graphics: **Venue FPS Cap** `0` (unlimited) renders the stage every frame;
-     if your GPU can't keep up, a cap of 60 still looks fine in stereo.
-   - In Virtual Desktop: 90 Hz, SSW (reprojection) **on** if you can't hold 90 fps.
-   - `F9` re-places the screen comfortably in front of you at eye height whenever you move around.
-
-## Building from source
-
-```bash
-# 1. fetch reference DLLs (MelonLoader + YARG Managed + openvr_api.dll)
-./setup-libs.sh            # optional arg: YARG version, default 0.15.0
-
-# 2. build (needs .NET SDK 8; works on Linux/Windows — no Windows targeting pack needed)
-./build.sh
-# -> bin/Release/YARG-VR.dll
-```
-
-CI (`.github/workflows/build.yml`) runs the same pipeline on every push and attaches a
-ready-to-install zip to GitHub Releases on tags.
-
-## Repository layout
-
-```
-YARG-VR-Mod/
-├── YARG.VR.csproj                  # net472 class library → YARG-VR.dll
-├── src/
-│   ├── AssemblyInfo.cs             # MelonInfo / MelonGame("YARC","YARG")
-│   ├── VrMod.cs                    # MelonMod entry: prefs, hotkeys, scene lifecycle
-│   ├── VrSceneRig.cs               # stereo eye cameras, world-space screen, venue/highway stereo
-│   ├── OpenVrRuntime.cs            # openvr_api preload/init/poses/per-eye submit
-│   └── YargBridge.cs               # reflection bridge to YARG's CameraManager.CurrentCamera
-├── vendor/OpenVR/openvr_api.cs     # Valve's official C# binding (BSD-3-Clause)
-├── .github/workflows/build.yml     # CI: download real refs → build → artifact/release
-├── setup-libs.sh / build.sh        # local build helpers
-├── LICENSE (MIT) · NOTICE · .gitignore · README.md
-```
 
 ## License & credits
 
