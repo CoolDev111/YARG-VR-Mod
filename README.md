@@ -1,6 +1,6 @@
 # YARG-VR
 
-! ALL OF THE BELOW IS A PLACEHOLDER, I WILL FIX IT LATER, IGNORE ALL OF IT.
+# **ALL OF THE BELOW IS A PLACEHOLDER, I WILL FIX IT LATER, IGNORE ALL OF IT.**
 
 **Play [YARG](https://yarg.in) (Yet Another Rhythm Game) in VR — with SteamVR (OpenVR) + MelonLoader,
 by touching nothing but the game's cameras.**
