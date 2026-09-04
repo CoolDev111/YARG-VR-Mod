@@ -13,9 +13,6 @@ namespace YargVr
         public MelonLoader.MelonPreferences_Entry<bool> StereoHighways;
         public MelonLoader.MelonPreferences_Entry<string> KeyToggle;
         public MelonLoader.MelonPreferences_Entry<string> KeyRecenter;
-        public MelonLoader.MelonPreferences_Entry<string> KeyProbe;
-        public MelonLoader.MelonPreferences_Entry<string> KeyReconnect;
-        public MelonLoader.MelonPreferences_Entry<string> AutoBindProfileName;
         public MelonLoader.MelonPreferences_Entry<float> HudScale;
         public MelonLoader.MelonPreferences_Entry<float> HudDistance;
         public MelonLoader.MelonPreferences_Entry<float> HudFov;
@@ -50,17 +47,14 @@ namespace YargVr
     /// Hotkeys (defaults):
     ///   F8 - toggle VR mode on/off
     ///   F9 - recenter (re-anchor the stage view + re-place the game screen in front of you)
-    ///   F7 - input device probe (log-only dump: XInput slots, InputSystem devices, YARG
-    ///        profile matching, passive 5 s input-activity window)
-    ///   F6 - reconnect instruments (re-runs YARG's own profile-claim for every visible
-    ///        instrument; non-destructive). v1.3.13: instruments are ALSO auto-claimed
-    ///        the moment they appear (device watcher) - F6 is the manual fallback.
-    ///        v1.3.14: with AutoBindProfileName set, a device that matches NO saved
-    ///        profile is re-bound to that profile via YARG's own AddDevice + saved,
-    ///        defeating the Riff Master's boot-order hash drift.
     ///   [ / ] - nudge the two eye images of the UI toward each other / apart at runtime
     ///        (ScreenStereo; 0 = flat, 1.0 = true depth, up to 50 = wider-than-eye
     ///        separation for fusing layers closer than the screen; saves to the config)
+    ///   Shift+[ / ] - visualizer ring radius; Ctrl+[ / ] - visualizer bar height (v1.3.17)
+    ///
+    /// v1.3.18: ALL instrument/controller fixing logic was removed (device probe, watcher,
+    /// auto-reconnect, auto-bind, absence watchdog, Windows re-scan, HID liveness) - the mod
+    /// is a pure VR renderer again; controllers are YARG's own business.
     ///
     /// VR is active in EVERY scene (menus included): the world-space game screen shows the
     /// game at all times; the stage camera takeover engages when a venue camera exists.
@@ -72,18 +66,11 @@ namespace YargVr
 
         private UnityEngine.InputSystem.Key _keyToggle = UnityEngine.InputSystem.Key.F8;
         private UnityEngine.InputSystem.Key _keyRecenter = UnityEngine.InputSystem.Key.F9;
-        private UnityEngine.InputSystem.Key _keyProbe = UnityEngine.InputSystem.Key.F7;
-        private UnityEngine.InputSystem.Key _keyReconnect = UnityEngine.InputSystem.Key.F6;
         private UnityEngine.InputSystem.Key _keyScreenCloser = UnityEngine.InputSystem.Key.LeftBracket;
         private UnityEngine.InputSystem.Key _keyScreenFarther = UnityEngine.InputSystem.Key.RightBracket;
-        private string _parsedToggle, _parsedRecenter, _parsedProbe, _parsedReconnect, _parsedScreenCloser, _parsedScreenFarther;
+        private string _parsedToggle, _parsedRecenter, _parsedScreenCloser, _parsedScreenFarther;
 
         private float _nextInitAttempt;
-
-        // v1.3.9: the startup device probe no longer runs at OnInitializeMelon time (that
-        // was the boot-crash trigger - see DeviceProbe class header). It runs once, from
-        // OnUpdate, on the first frame where DeviceProbe.YargStaticStateIsSettled() is true.
-        private bool _startupDumpPending;
 
         private string _lastThrottleKey;
         private int _lastThrottleFrame = -1;
@@ -114,36 +101,13 @@ namespace YargVr
 
             HookSceneEvents(true);
 
-            LoggerInstance.Msg("YARG-VR 1.3.17 initialized (true stereo).");
+            LoggerInstance.Msg("YARG-VR 1.3.18 initialized (true stereo).");
             LoggerInstance.Msg("  Hotkeys: " + _settings.KeyToggle.Value + " = toggle VR, " +
                 _settings.KeyRecenter.Value + " = recenter / re-place screen, " +
-                _settings.KeyProbe.Value + " = input device probe (log-only), " +
-                _settings.KeyReconnect.Value + " = reconnect instruments, " +
                 _settings.KeyScreenCloser.Value + "/" + _settings.KeyScreenFarther.Value +
                 " = move the two UI images toward each other / apart (fixes doubling), " +
                 "Shift+those = visualizer ring radius, Ctrl+those = visualizer bar height.");
 
-            // v1.3.9: NEVER probe YARG at melon-init time. MelonLoader can run this method
-            // before YARG's boot initialized its data paths; executing YARG statics there
-            // poisons their static constructors for the whole session (boot crash). The
-            // dump now happens from OnUpdate once the game is provably settled.
-            _startupDumpPending = true;
-            DeviceProbe.AutoBindProfileName = _settings.AutoBindProfileName.Value ?? "";
-            LoggerInstance.Msg("  Startup device probe deferred until the game finishes loading.");
-            LoggerInstance.Msg("  Instrument watcher active: a guitar/drums appearing is logged and auto-claimed (" +
-                _settings.KeyReconnect.Value + " = manual retry)." +
-                (string.IsNullOrWhiteSpace(_settings.AutoBindProfileName.Value)
-                    ? " AutoBindProfileName is NOT set - set it in the cfg to survive guitar hash changes."
-                    : " Auto-binding unmatched instruments to profile '" + _settings.AutoBindProfileName.Value + "'."));
-            // v1.3.15: sustained absence is no longer silent - the watchdog posts status
-            // lines and can self-heal a stuck dongle via the targeted Windows re-scan.
-            // v1.3.16: while absent it also reads the dongle's HID interface directly
-            // (5 s windows, [hid] lines) - the decisive "is the guitar sending data" test.
-            LoggerInstance.Msg("  Guitar absence watchdog: while no instrument is present it posts a status line " +
-                "every ~30 s, reads the dongle's HID interface directly in 5 s windows ([hid] lines - press guitar " +
-                "buttons when prompted), and runs a one-time targeted Windows re-scan (dongle-replug equivalent, " +
-                "needs YARG started as administrator) after 60 s of absence; " +
-                _settings.KeyReconnect.Value + " runs both on demand when no candidate devices exist.");
             LoggerInstance.Msg("  Requires SteamVR. VR is active in every scene (menus included).");
             LoggerInstance.Msg("  Screen mode: " + (_settings.ScreenFollowsView.Value
                 ? "FOLLOWS VIEW (set ScreenFollowsView = false for a room-locked screen)"
@@ -174,21 +138,6 @@ namespace YargVr
                 "Key used to enable/disable VR mode at runtime (UnityEngine.InputSystem.Key name).");
             _settings.KeyRecenter = cat.CreateEntry<string>("KeyRecenter", "F9", "Recenter key",
                 "Re-anchors the stage view and re-places the game screen in front of you (at eye height, level).");
-            _settings.KeyProbe = cat.CreateEntry<string>("KeyProbe", "F7", "Input probe key",
-                "Log-only diagnostic: dumps XInput slots, Unity InputSystem devices, YARG profile " +
-                "matching, and captures 5 s of raw input events (press while an instrument controller " +
-                "is dead to see which layer swallowed it).");
-            _settings.KeyReconnect = cat.CreateEntry<string>("KeyReconnect", "F6", "Reconnect instruments key",
-                "Re-runs YARG's own profile-claim (TryConnectProfile) for every visible instrument " +
-                "device - the same non-destructive call YARG makes on first button press. Use when a " +
-                "connected instrument stays dead; the log reports exactly why each device connects or not.");
-            _settings.AutoBindProfileName = cat.CreateEntry<string>("AutoBindProfileName", "", "Auto-bind instruments to profile",
-                "The Riff Master's device hash can differ between boots (it is a SHA1 of the device " +
-                "description, which varies with enumeration order), so YARG's saved profile stops " +
-                "matching and the guitar dies. When set: any instrument that matches NO saved profile " +
-                "is bound to the profile with this exact name (YARG's own AddDevice path), " +
-                "bindings.json is saved, and the device is connected - automatically, every boot. " +
-                "Example: Mason. Leave empty to disable.");
             _settings.HudScale = cat.CreateEntry<float>("HudScale", 1.0f, "HUD scale",
                 "Scales the head-locked game view / HUD. 1.0 matches the desktop layout.");
             _settings.HudDistance = cat.CreateEntry<float>("HudDistance", 2.0f, "Screen distance (m)",
@@ -222,6 +171,8 @@ namespace YargVr
                 "screen distance. Applied on (re)place - press F9 after changing. v1.3.17 default " +
                 "1.8 m (was 1.2 m): the v1.3.15 per-eye projection fix made stereo depth real, " +
                 "which made 1.2 m read as in-your-face; existing configs are migrated once.");
+            _settings.HudPopMigrated = cat.CreateEntry<bool>("HudPopMigrated", false, "HUD pop distance migrated (internal)",
+                "One-shot guard for the v1.3.17 HudPopDistance migration (1.2 -> 1.8 m). Do not edit.");
             _settings.Visualizer = cat.CreateEntry<bool>("Visualizer", true, "Audio visualizer ring",
                 "A ring of audio-reactive bars around your play space, bouncing to the song. " +
                 "Turn OFF for a plain black void.");
@@ -306,23 +257,6 @@ namespace YargVr
                 ParseHotkeys(force: false);
                 HandleHotkeys();
                 TryInitOpenVr();
-                DeviceProbe.InstallDeviceWatcher(LoggerInstance); // v1.3.13: no-op once installed
-                DeviceProbe.Tick(LoggerInstance);
-
-                // v1.3.9: the startup probe runs here - OnUpdate only executes once real
-                // frames are ticking, which by Unity's boot order is strictly after
-                // RuntimeInitializeOnLoadMethod(BeforeSplashScreen) and the first scene's
-                // Awakes (YARG's SingletonAwake included). YargStaticStateIsSettled is the
-                // explicit second layer.
-                if (_startupDumpPending && DeviceProbe.YargStaticStateIsSettled())
-                {
-                    _startupDumpPending = false;
-                    DeviceProbe.Dump(LoggerInstance, "startup (deferred until the game finished loading)");
-                    // v1.3.13: devices that enumerated before the watcher was installed
-                    // produce no Added event - sweep the table once and auto-claim if any
-                    // instrument is already present.
-                    DeviceProbe.AutoReconnectIfInstrumentsPresent(LoggerInstance);
-                }
             }
             catch (Exception e)
             {
@@ -414,24 +348,6 @@ namespace YargVr
                 }
             }
 
-            if (force || !string.Equals(_parsedProbe, _settings.KeyProbe.Value, StringComparison.OrdinalIgnoreCase))
-            {
-                _parsedProbe = _settings.KeyProbe.Value;
-                if (!Enum.TryParse(_parsedProbe, true, out _keyProbe))
-                {
-                    _keyProbe = UnityEngine.InputSystem.Key.F7;
-                }
-            }
-
-            if (force || !string.Equals(_parsedReconnect, _settings.KeyReconnect.Value, StringComparison.OrdinalIgnoreCase))
-            {
-                _parsedReconnect = _settings.KeyReconnect.Value;
-                if (!Enum.TryParse(_parsedReconnect, true, out _keyReconnect))
-                {
-                    _keyReconnect = UnityEngine.InputSystem.Key.F6;
-                }
-            }
-
             if (force || !string.Equals(_parsedScreenCloser, _settings.KeyScreenCloser.Value, StringComparison.OrdinalIgnoreCase))
             {
                 _parsedScreenCloser = _settings.KeyScreenCloser.Value;
@@ -482,24 +398,6 @@ namespace YargVr
                 {
                     _rig.Recenter();
                     LoggerInstance.Msg("Recentered VR view.");
-                }
-            }
-
-            if (keyboard[_keyProbe] != null && keyboard[_keyProbe].wasPressedThisFrame)
-            {
-                DeviceProbe.Dump(LoggerInstance, "manual " + _parsedProbe);
-            }
-
-            if (keyboard[_keyReconnect] != null && keyboard[_keyReconnect].wasPressedThisFrame)
-            {
-                // v1.3.15: ReconnectInstruments returns the candidate count (-1 = pass did
-                // not run). Zero candidates means the device table holds no instrument at
-                // all - the claim pass cannot conjure one, so run the targeted Windows
-                // device re-scan (dongle-replug equivalent) on demand.
-                int scanned = DeviceProbe.ReconnectInstruments(LoggerInstance, "manual F6");
-                if (scanned == 0)
-                {
-                    DeviceProbe.RunDeviceNudge(LoggerInstance, "manual F6 found no candidate devices");
                 }
             }
 
@@ -589,7 +487,6 @@ namespace YargVr
             {
                 OpenVrRuntime.FlipTextureBounds = _settings.SubmissionFlip.Value;
                 LoggerInstance.Msg("SteamVR compositor ready - VR view engages in every scene.");
-                DeviceProbe.Dump(LoggerInstance, "steamvr-connected");
 
                 // Engage immediately, whatever scene we are in (menus included).
                 EnterScene();

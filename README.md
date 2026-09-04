@@ -45,8 +45,6 @@ compositor**.
 |---|---|
 | `F8` | Toggle VR mode on/off (restores the desktop window instantly) |
 | `F9` | Recenter — **resets the stage view's rotation** to your current facing **and re-places the screen** (position + rotation) in front of you at eye height, level |
-| `F7` | Input device probe — log-only dump: XInput slots (with packet-delta), InputSystem devices + YARG hashes, profile match matrix, claimed devices, 5 s passive activity window. Harmless any time |
-| `F6` | Reconnect instruments — re-runs YARG's own profile-claim for every visible instrument device; the log says exactly why each connects or not. Since v1.3.13 this also runs **automatically** the moment an instrument appears (watcher logs `[YARG-VR][watch] device added: ...`); since v1.3.14 an unmatched device is auto-bound to the `AutoBindProfileName` profile and connected; since v1.3.15 pressing it with **zero candidate devices** also runs the targeted Windows device re-scan (dongle-replug equivalent) |
 | `[` | Move the two eye images of the UI **toward each other** (ScreenStereo −0.1) — stops doubled/ghosted UI text; saved instantly |
 | `]` | Move the two eye images of the UI **apart** (ScreenStereo +0.1, max 50 — 1.0 = true depth, above 1.0 = wider-than-eye separation) |
 | Shift+`[` / Shift+`]` | Visualizer ring radius −/+ 0.25 m (1.5–12 m) — pushes the bar ring out/in around you (v1.3.17); saved instantly |
