@@ -28,10 +28,10 @@ compositor**.
 
    * Download `MelonLoader.x64.zip` from https://github.com/LavaGang/MelonLoader/releases/latest
    * Extract it into your YARG install folder (next to `YARG.exe`) so you get `version.dll`,
-`MelonLoader/`, `dobby.dll`, etc.
+`MelonLoader/`, `dobby.dll`, etc (Whatever it may be).
 2. **Install the mod**:
 
-   * Copy **`YARG-VR.dll`** and **`openvr\_api.dll`** into `YARG/Mods/`.
+   * Copy **`YARG-VR.dll`** and **`openvr_api.dll`** into `Mods/` (NEXT TO THE .EXE).
 3. Launch:
 
    * Start YARG.
@@ -81,24 +81,24 @@ VisualizerOcclusion = true # bars hide when seen through the menu/HUD screens (v
 
 ## What you'll see
 
-* **In the headset, everywhere:** VR is no longer gameplay-only — menus, song select and the game
-screen are all shown on the floating stereo screen at all times. The screen is **locked in the
-room** at eye height, level, `HudDistance` meters in front of where you last recentered (`F9`);
-leaning and walking produce real parallax. YARG's **3-D environment** (menu background hues,
-stage environment) fills the space around the screen, and the **visualizer ring** bounces to the
-music. With `HudPopOut` on, the HUD floats on a second plane closer to you.
-* **During a song:** the **stage is true stereo** (two renders, real IPD — look around it freely)
-and the **note highways re-project per-eye**. HUD, rock meter, score, lyrics and the pause menu
-float on **their own plane closer to you** (parallax pop-out). **Chart video backgrounds**
-(`video.webm`) play behind the highways on the screen. The view re-anchors whenever the song's
-camera direction cuts.
-* **On the monitor:** with `DesktopMirror = true` (default) the monitor shows **exactly the headset
-view** (letterboxed) — perfect for spectators. With it off, YARG's normal 2-D view keeps working
-(the floating screen may appear mirrored/at an angle in it, since the game camera now looks at a
-real object in the room). SteamVR's **Display Mirror** shows the stereo HMD image either way.
-* **Performance:** the stage is rendered twice (once per eye) at your desktop resolution and the
-game screen once per eye at compositor resolution. If it's heavy, set `StereoVenue = false`,
-lower YARG's *Venue Render Scale*, or lower `Supersample` to `0.9`–`1.0`.
+- **In the headset, everywhere:** VR is no longer gameplay-only — menus, song select and the game
+  screen are all shown on the floating stereo screen at all times. The screen is **locked in the
+  room** at eye height, level, `HudDistance` meters in front of where you last recentered (`F9`);
+  leaning and walking produce real parallax. YARG's **3-D environment** (menu background hues,
+  stage environment) fills the space around the screen, and the **visualizer ring** bounces to the
+  music. With `HudPopOut` on, the HUD floats on a second plane closer to you.
+- **During a song:** the **stage is true stereo** (two renders, real IPD — look around it freely)
+  and the **note highways re-project per-eye**. HUD, rock meter, score, lyrics and the pause menu
+  float on **their own plane closer to you** (parallax pop-out). **Chart video backgrounds**
+  (`video.webm`) play behind the highways on the screen. The view re-anchors whenever the song's
+  camera direction cuts.
+- **On the monitor:** with `DesktopMirror = true` (default) the monitor shows **exactly the headset
+  view** (letterboxed) — perfect for spectators. With it off, YARG's normal 2-D view keeps working
+  (the floating screen may appear mirrored/at an angle in it, since the game camera now looks at a
+  real object in the room). SteamVR's **Display Mirror** shows the stereo HMD image either way.
+- **Performance:** the stage is rendered twice (once per eye) at your desktop resolution and the
+  game screen once per eye at compositor resolution. If it's heavy, set `StereoVenue = false`,
+  lower YARG's *Venue Render Scale*, or lower `Supersample` to `0.9`–`1.0`.
 
 ## Building from source
 
