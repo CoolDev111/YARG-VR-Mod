@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    YARG-VR — a MelonLoader mod that makes YARG (Yet Another Rhythm Game) playable in VR
+    via SteamVR/OpenVR, by taking over the game's cameras only.
+
+    Build:  dotnet build YARG.VR.csproj -c Release -p:GameLibs=/path/to/libs
+    GameLibs must contain:
+      MelonLoader.dll            (from MelonLoader.x64.zip -> MelonLoader/net472/MelonLoader.dll)
+      UnityEngine.dll            (from YARG_Data/Managed)
+      UnityEngine.CoreModule.dll (from YARG_Data/Managed)
+      UnityEngine.UIModule.dll   (from YARG_Data/Managed)
+      UnityEngine.UI.dll         (from YARG_Data/Managed, uGUI components)
+      UnityEngine.SceneManagementModule.dll (from YARG_Data/Managed)
+      UnityEngine.VideoModule.dll (from YARG_Data/Managed, chart video backgrounds)
+      Unity.InputSystem.dll      (from YARG_Data/Managed)
+    The bundled openvr_api.cs (Valve's official C# binding, BSD-3-Clause) is compiled in.
+    `setup-libs.sh` downloads all of the above automatically.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>YARG-VR</AssemblyName>
+    <RootNamespace>YargVr</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <GameLibs Condition="'$(GameLibs)' == ''">$(MSBuildThisFileDirectory)..\libs</GameLibs>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets net472 compile on machines/CI without the .NET Framework 4.7.2 targeting pack -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- vendor/OpenVR/openvr_api.cs is compiled in automatically by SDK globbing -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(GameLibs)/MelonLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameLibs)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameLibs)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(GameLibs)/UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameLibs)/UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- NOTE: in Unity 6, UnityEngine.SceneManagement (SceneManager/Scene) lives in
+         UnityEngine.CoreModule - there is no separate SceneManagementModule anymore. -->
+    <Reference Include="Unity.InputSystem">
+      <HintPath>$(GameLibs)/Unity.InputSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- VideoPlayer (chart video backgrounds) - lives in VideoModule in Unity 6 -->
+    <Reference Include="UnityEngine.VideoModule">
+      <HintPath>$(GameLibs)/UnityEngine.VideoModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- AudioListener/FFTWindow (visualizer) and Collider (primitive cleanup) -->
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(GameLibs)/UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(GameLibs)/UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

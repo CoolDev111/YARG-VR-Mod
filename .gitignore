@@ -5,12 +5,3 @@ dist/
 *.user
 .vs/
 .idea/
-
-
-
-src/
-vendor/
-*.yml
-*.sh
-*.slnx
-*.csproj
