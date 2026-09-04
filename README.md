@@ -41,10 +41,14 @@ compositor**.
 
 ## Hotkeys (defaults)
 
-|Key|Action|
-|-|-|
-|`F8`|Toggle VR mode on/off (restores the desktop window instantly)|
-|`F9`|Recenter — **resets the stage view's rotation** to your current facing **and re-places the screen** (position + rotation) in front of you at eye height, level|
+| Key | Action |
+|---|---|
+| `F8` | Toggle VR mode on/off (restores the desktop window instantly) |
+| `F9` | Recenter — **resets the stage view's rotation** to your current facing **and re-places the screen** (position + rotation) in front of you at eye height, level |
+| `F7` | Input device probe — log-only dump: XInput slots (with packet-delta), InputSystem devices + YARG hashes, profile match matrix, claimed devices, 5 s passive activity window. Harmless any time |
+| `F6` | Reconnect instruments — re-runs YARG's own profile-claim for every visible instrument device; the log says exactly why each connects or not. Since v1.3.13 this also runs **automatically** the moment an instrument appears (watcher logs `[YARG-VR][watch] device added: ...`); since v1.3.14 an unmatched device is auto-bound to the `AutoBindProfileName` profile and connected; since v1.3.15 pressing it with **zero candidate devices** also runs the targeted Windows device re-scan (dongle-replug equivalent) |
+| `[` | Move the two eye images of the UI **toward each other** (ScreenStereo −0.1) — stops doubled/ghosted UI text; saved instantly |
+| `]` | Move the two eye images of the UI **apart** (ScreenStereo +0.1, max 50 — 1.0 = true depth, above 1.0 = wider-than-eye separation) |
 
 Both are rebindable in the config file (any `UnityEngine.InputSystem.Key` name, e.g. `F10`, `Home`).
 
@@ -58,10 +62,15 @@ StereoVenue = true        # render the stage twice (once per eye) - turn OFF on 
 StereoHighways = true     # per-eye note highway reprojection - turn OFF on weaker PCs
 KeyToggle = "F8"
 KeyRecenter = "F9"
+KeyProbe = "F7"           # input device probe (log-only diagnostics, v1.3.4)
+KeyReconnect = "F6"       # reconnect instruments (auto-claims on device appearance since v1.3.13; F6 = manual retry)
+AutoBindProfileName = "(Your Profile Name)"  # re-bind any unmatched instrument to this profile every boot (v1.3.14; empty = off).
+KeyScreenCloser = "LeftBracket"   # [ - move the two UI images toward each other (v1.3.6)
+KeyScreenFarther = "RightBracket" # ] - move the two UI images apart (v1.3.6)
 HudScale = 1.0            # multiplies the screen size (1.0 ≈ 72% of your eye FOV; 1.4 fills it)
 HudDistance = 2.0         # meters from your head (applied when the screen is (re)placed - press F9)
 HudFov = 0                # screen FOV; 0 = use your HMD's eye FOV
-ScreenStereo = 1.0        # screen stereo depth 0-1; lower if content looks doubled/blurry
+ScreenStereo = 8.4        # screen stereo depth 0-50 (1.0 = true depth, above 1.0 = wider than your eyes); 8.4 = tuned default, press [ / ] live instead of editing
 ScreenFollowsView = false # true = screen yaws to face you; false = locked where placed
 ShowWorld = true          # render YARG's 3-D environment (menu bg, stage, highway room) around the screen
 DesktopMirror = true      # monitor shows the headset view (letterboxed)
