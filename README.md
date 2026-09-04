@@ -77,9 +77,11 @@ ScreenFollowsView = false # true = screen yaws to face you; false = locked where
 ShowWorld = true          # render YARG's 3-D environment (menu bg, stage, highway room) around the screen
 DesktopMirror = true      # monitor shows the headset view (letterboxed)
 HudPopOut = true          # HUD floats on its own plane closer than the screen
-HudPopDistance = 1.2      # HUD plane distance (m); smaller than HudDistance
+HudPopDistance = 1.8      # HUD plane distance (m); smaller than HudDistance (v1.3.17 default; old 1.2 migrated once)
 Visualizer = true         # ring of 48 audio-reactive bars around the play space
 VisualizerGain = 1.0      # bar reaction strength (0.1 - 5); raise if bars barely move
+VisualizerRadius = 4.5    # ring radius in meters (1.5-12); Shift+[ / Shift+] tunes it live (v1.3.17)
+VisualizerMaxHeight = 3.0 # max bar height in meters (0.2-8); Ctrl+[ / Ctrl+] tunes it live (v1.3.17)
 Supersample = 1.0         # 0.5 - 2.5 x compositor resolution (per eye)
 VenueFovOverride = 0      # wider/narrower stage view in VR; 0 = YARG's own FOV
 AutoRecenterOnCut = true  # re-anchor when the song cuts to another stage camera
@@ -88,7 +90,7 @@ HeightOffset = 0          # meters of extra height for the stage camera
 PoseDebug = false         # logs head/root/screen poses every 5 s (diagnostics only)
 MenuEnvSurround = true    # 360° menu background sphere in the menus (v1.3.3)
 VisualizerOcclusion = true # song: bars hidden when seen through screens; menu: ring arranged so it cannot block
-VisualizerInMenu = true   # menu ring: ON = visible low-profile (short bars, 3.2 m out); OFF = hidden entirely (v1.3.6)
+VisualizerInMenu = true   # menu ring: ON = visible low-profile (short bars, ring pushed out); OFF = hidden entirely (v1.3.6)
 OpenVrProjection = true   # eye cameras use OpenVR's per-eye frusta (v1.3.6; fixes UI doubling)
 ```
 
