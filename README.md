@@ -49,8 +49,10 @@ compositor**.
 | `F6` | Reconnect instruments — re-runs YARG's own profile-claim for every visible instrument device; the log says exactly why each connects or not. Since v1.3.13 this also runs **automatically** the moment an instrument appears (watcher logs `[YARG-VR][watch] device added: ...`); since v1.3.14 an unmatched device is auto-bound to the `AutoBindProfileName` profile and connected; since v1.3.15 pressing it with **zero candidate devices** also runs the targeted Windows device re-scan (dongle-replug equivalent) |
 | `[` | Move the two eye images of the UI **toward each other** (ScreenStereo −0.1) — stops doubled/ghosted UI text; saved instantly |
 | `]` | Move the two eye images of the UI **apart** (ScreenStereo +0.1, max 50 — 1.0 = true depth, above 1.0 = wider-than-eye separation) |
+| Shift+`[` / Shift+`]` | Visualizer ring radius −/+ 0.25 m (1.5–12 m) — pushes the bar ring out/in around you (v1.3.17); saved instantly |
+| Ctrl+`[` / Ctrl+`]` | Visualizer bar max height +/− 0.25 m (0.2–8 m) — taller/shorter bars at full loudness (v1.3.17); saved instantly |
 
-Both are rebindable in the config file (any `UnityEngine.InputSystem.Key` name, e.g. `F10`, `Home`).
+Both probe keys are rebindable in the config file (any `UnityEngine.InputSystem.Key` name, e.g. `F10`, `Home`), as are F8/F9 and `[`/`]` (`KeyScreenCloser` / `KeyScreenFarther`); the Shift/Ctrl visualizer variants use those same two keys.
 
 ## Settings — `YARG/UserData/MelonPreferences.cfg`
 

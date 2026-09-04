@@ -95,8 +95,30 @@ namespace YargVr
         private int[] _visBinLo;
         private int[] _visBinHi;
         private const int VisBarCount = 48;
+        // Pre-v1.3.17 baseline geometry. The ring is user-tunable since v1.3.17
+        // (VisualizerRadius / VisualizerMaxHeight prefs; Shift/Ctrl + the ScreenStereo keys);
+        // these stay as the baseline the bar thickness scaling and the menu low-profile
+        // proportions are derived from.
         private const float VisRadius = 2.7f;
         private const float VisMaxHeight = 1.7f;
+
+        private float VisRadiusNow
+        {
+            get { return Mathf.Clamp(_settings.VisualizerRadius.Value, 1.5f, 12f); }
+        }
+
+        private float VisMaxHeightNow
+        {
+            get { return Mathf.Clamp(_settings.VisualizerMaxHeight.Value, 0.2f, 8f); }
+        }
+
+        // Bars keep their pre-1.3.17 proportions as the ring grows (0.16 m square at the old
+        // 2.7 m radius).
+        private float VisThicknessNow
+        {
+            get { return Mathf.Max(0.12f, 0.16f * VisRadiusNow / VisRadius); }
+        }
+
         private bool _visBassOkLogged;
         private bool _visBassMissingLogged;
         private MeshRenderer[] _visRenderers; // for per-bar occlusion (hide bars behind screens)
@@ -2041,10 +2063,11 @@ namespace YargVr
         /// <summary>
         /// v1.3.0: the ring SURROUNDS THE PLAYER again - centered on the room root, i.e. where
         /// the player stood at the last (re)center, and it rotates with the root's yaw so its
-        /// "front" matches the screen direction. At radius 2.7 m the front arc passes BEHIND
-        /// the ~2 m screen plane, so the screen occludes the bars dead ahead while the ring
-        /// wraps around the player on the sides and behind (v1.2.2 pushed the whole ring 5+
-        /// m out as a backdrop, which read as "the bars are not around me").
+        /// "front" matches the screen direction. The radius (default 4.5 m since v1.3.17, was
+        /// 2.7 m) always puts the front arc BEHIND the ~2 m screen plane, so the screen
+        /// occludes the bars dead ahead while the ring wraps around the player on the sides
+        /// and behind (v1.2.2 pushed the whole ring 5+ m out as a backdrop, which read as
+        /// "the bars are not around me").
         /// Bar bases sit ~1.35 m below the head-height root (estimated floor level).
         /// </summary>
         private void PositionVisualizer()
@@ -2065,7 +2088,7 @@ namespace YargVr
                 }
                 float a = (float)i / VisBarCount * Mathf.PI * 2f;
                 _visBars[i].localPosition = new Vector3(
-                    Mathf.Cos(a) * VisRadius, _visBars[i].localScale.y * 0.5f, Mathf.Sin(a) * VisRadius);
+                    Mathf.Cos(a) * VisRadiusNow, _visBars[i].localScale.y * 0.5f, Mathf.Sin(a) * VisRadiusNow);
             }
         }
 
@@ -2119,13 +2142,23 @@ namespace YargVr
 
             // v1.3.12: in the menus the ring stays VISIBLE but low-profile (needs
             // VisualizerOcclusion + VisualizerInMenu ON): bars are capped short and the ring
-            // is pushed out to 3.2 m, so it hugs the floor well below the menu panels (which
+            // is pushed out, so it hugs the floor well below the menu panels (which
             // float at eye height) and can never cover them. Gameplay keeps the full ring.
+            // v1.3.17: both the full ring and the menu low-profile version scale from the
+            // VisualizerRadius / VisualizerMaxHeight prefs - the menu variant keeps the same
+            // proportions relative to the configured ring (pushed ~20% farther out, capped at
+            // ~40% of the bar height, hard cap 1.5 m).
             bool menuSafe = _settings.VisualizerOcclusion.Value &&
                             _settings.VisualizerInMenu.Value &&
                             _menuBgComponent != null;
-            float maxH = menuSafe ? 0.75f : VisMaxHeight;
-            float radius = menuSafe ? 3.2f : VisRadius;
+            float radius = VisRadiusNow;
+            float maxH = VisMaxHeightNow;
+            if (menuSafe)
+            {
+                radius *= 1.2f;
+                maxH = Mathf.Min(maxH * 0.4f, 1.5f);
+            }
+            float thickness = VisThicknessNow;
 
             float gain = Mathf.Clamp(_settings.VisualizerGain.Value, 0.1f, 5f);
 
@@ -2169,7 +2202,7 @@ namespace YargVr
 
                 float h = 0.06f + _visAmp[i] * maxH;
                 float a = (float)i / VisBarCount * Mathf.PI * 2f;
-                _visBars[i].localScale = new Vector3(0.16f, h, 0.16f);
+                _visBars[i].localScale = new Vector3(thickness, h, thickness);
                 _visBars[i].localPosition = new Vector3(
                     Mathf.Cos(a) * radius, h * 0.5f, Mathf.Sin(a) * radius);
                 _visMats[i].color = _visBase[i] * (0.25f + 0.85f * _visAmp[i]);
@@ -2232,9 +2265,10 @@ namespace YargVr
             // screen rectangle - in the menu the bars around the screen kept "blocking the
             // main menu", so v1.3.6 hid the ring ENTIRELY there. v1.3.12 splits the two
             // behaviors: VisualizerInMenu ON (default) keeps the ring visible in the menus
-            // in a low-profile arrangement (UpdateVisualizer caps the bars at 0.75 m and
-            // pushes the ring out to 3.2 m - below the eye-height panels), while OFF
-            // restores the v1.3.6 full hide. Gameplay keeps the through-screen occlusion.
+            // in a low-profile arrangement (UpdateVisualizer caps the bars at ~40% of the
+            // configured height and pushes the ring ~20% farther out - below the eye-height
+            // panels), while OFF restores the v1.3.6 full hide. Gameplay keeps the
+            // through-screen occlusion.
             bool menuHideAll = occlusionOn && inMenu && !_settings.VisualizerInMenu.Value;
             bool menuContext = occlusionOn && inMenu;
 

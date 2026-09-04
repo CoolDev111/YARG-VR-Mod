@@ -25,8 +25,11 @@ namespace YargVr
         public MelonLoader.MelonPreferences_Entry<bool> DesktopMirror;
         public MelonLoader.MelonPreferences_Entry<bool> HudPopOut;
         public MelonLoader.MelonPreferences_Entry<float> HudPopDistance;
+        public MelonLoader.MelonPreferences_Entry<bool> HudPopMigrated;
         public MelonLoader.MelonPreferences_Entry<bool> Visualizer;
         public MelonLoader.MelonPreferences_Entry<float> VisualizerGain;
+        public MelonLoader.MelonPreferences_Entry<float> VisualizerRadius;
+        public MelonLoader.MelonPreferences_Entry<float> VisualizerMaxHeight;
         public MelonLoader.MelonPreferences_Entry<float> Supersample;
         public MelonLoader.MelonPreferences_Entry<float> VenueFovOverride;
         public MelonLoader.MelonPreferences_Entry<bool> AutoRecenterOnCut;
@@ -111,13 +114,14 @@ namespace YargVr
 
             HookSceneEvents(true);
 
-            LoggerInstance.Msg("YARG-VR 1.3.16 initialized (true stereo).");
+            LoggerInstance.Msg("YARG-VR 1.3.17 initialized (true stereo).");
             LoggerInstance.Msg("  Hotkeys: " + _settings.KeyToggle.Value + " = toggle VR, " +
                 _settings.KeyRecenter.Value + " = recenter / re-place screen, " +
                 _settings.KeyProbe.Value + " = input device probe (log-only), " +
                 _settings.KeyReconnect.Value + " = reconnect instruments, " +
                 _settings.KeyScreenCloser.Value + "/" + _settings.KeyScreenFarther.Value +
-                " = move the two UI images toward each other / apart (fixes doubling).");
+                " = move the two UI images toward each other / apart (fixes doubling), " +
+                "Shift+those = visualizer ring radius, Ctrl+those = visualizer bar height.");
 
             // v1.3.9: NEVER probe YARG at melon-init time. MelonLoader can run this method
             // before YARG's boot initialized its data paths; executing YARG statics there
@@ -213,15 +217,24 @@ namespace YargVr
             _settings.HudPopOut = cat.CreateEntry<bool>("HudPopOut", true, "Pop out HUD",
                 "Moves the HUD (score, lyrics, practice HUD, song info, pause menu) onto its own " +
                 "floating plane closer to you for a parallax 3-D effect in front of the game screen.");
-            _settings.HudPopDistance = cat.CreateEntry<float>("HudPopDistance", 1.2f, "HUD plane distance (m)",
+            _settings.HudPopDistance = cat.CreateEntry<float>("HudPopDistance", 1.8f, "HUD plane distance (m)",
                 "Distance of the popped-out HUD plane from your head. Must be smaller than the " +
-                "screen distance. Applied on (re)place - press F9 after changing.");
+                "screen distance. Applied on (re)place - press F9 after changing. v1.3.17 default " +
+                "1.8 m (was 1.2 m): the v1.3.15 per-eye projection fix made stereo depth real, " +
+                "which made 1.2 m read as in-your-face; existing configs are migrated once.");
             _settings.Visualizer = cat.CreateEntry<bool>("Visualizer", true, "Audio visualizer ring",
                 "A ring of audio-reactive bars around your play space, bouncing to the song. " +
                 "Turn OFF for a plain black void.");
             _settings.VisualizerGain = cat.CreateEntry<float>("VisualizerGain", 1.0f, "Visualizer gain",
                 "Multiplier on how strongly the visualizer bars react to the music (0.1 - 5). " +
                 "Raise it if the bars barely move, lower it if they are pinned at full height.");
+            _settings.VisualizerRadius = cat.CreateEntry<float>("VisualizerRadius", 4.5f, "Visualizer ring radius (m)",
+                "Radius of the audio-reactive bar ring around your play space. v1.3.17 default " +
+                "4.5 m (was 2.7 m) - real stereo depth (v1.3.15 projection fix) made the old " +
+                "ring feel close. Tune live with Shift + the ScreenStereo keys (each press saves).");
+            _settings.VisualizerMaxHeight = cat.CreateEntry<float>("VisualizerMaxHeight", 3.0f, "Visualizer bar max height (m)",
+                "Maximum height the visualizer bars reach at full loudness. v1.3.17 default " +
+                "3.0 m (was 1.7 m). Tune live with Ctrl + the ScreenStereo keys (each press saves).");
             _settings.Supersample = cat.CreateEntry<float>("Supersample", 1.0f, "Supersampling",
                 "Multiplier on the compositor's recommended render target size (0.5 - 2.5).");
             _settings.VenueFovOverride = cat.CreateEntry<float>("VenueFovOverride", 0f, "Stage FOV override (0 = off)",
@@ -264,6 +277,24 @@ namespace YargVr
                 "Moves the two eye images of the UI apart (raises ScreenStereo by 0.1, max 50). " +
                 "1.0 = true depth; above 1.0 = wider-than-eye separation. " +
                 "UnityEngine.InputSystem.Key name. Default ].");
+
+            // v1.3.17 one-time migration: the pop-out HUD plane's old default (1.2 m) reads
+            // as in-your-face now that the v1.3.15 projection fix delivers real stereo
+            // depth. Bump configs that still carry the old default to the new one - but
+            // only once, guarded by HudPopMigrated, so an intentionally chosen 1.2 m
+            // survives future boots.
+            if (!_settings.HudPopMigrated.Value)
+            {
+                _settings.HudPopMigrated.Value = true;
+                if (Mathf.Abs(_settings.HudPopDistance.Value - 1.2f) < 0.01f)
+                {
+                    _settings.HudPopDistance.Value = 1.8f;
+                    LoggerInstance.Msg("v1.3.17: HUD pop-out plane moved back 1.2 m -> 1.8 m " +
+                        "(real stereo depth made 1.2 m feel too close). Press F9 to re-place; " +
+                        "HudPopDistance in the cfg tunes it.");
+                }
+                MelonLoader.MelonPreferences.Save();
+            }
 
             ParseHotkeys(force: true);
         }
@@ -474,28 +505,65 @@ namespace YargVr
 
             // [ / ]: live stereo-convergence tuning for the UI. The eye-camera separation is
             // recomputed every frame from ScreenStereo, so this takes effect immediately.
+            // v1.3.17: Shift+[/] tunes the visualizer ring radius, Ctrl+[/] the bar height -
+            // same keys, so no new binds are needed; plain [/] keeps its ScreenStereo role.
             if (keyboard[_keyScreenCloser] != null && keyboard[_keyScreenCloser].wasPressedThisFrame)
             {
-                float v = Mathf.Clamp(_settings.ScreenStereo.Value - 0.1f, 0f, 50f);
-                if (v != _settings.ScreenStereo.Value)
-                {
-                    _settings.ScreenStereo.Value = v;
-                    MelonLoader.MelonPreferences.Save();
-                    LoggerInstance.Msg("Screen stereo depth = " + v.ToString("F1") +
-                        " (the two UI images moved toward each other; 0 = flat screen).");
-                }
+                TuneBracket(-1f, keyboard);
             }
 
             if (keyboard[_keyScreenFarther] != null && keyboard[_keyScreenFarther].wasPressedThisFrame)
             {
-                float v = Mathf.Clamp(_settings.ScreenStereo.Value + 0.1f, 0f, 50f);
-                if (v != _settings.ScreenStereo.Value)
+                TuneBracket(+1f, keyboard);
+            }
+        }
+
+        /// <summary>
+        /// v1.3.17: one handler for the [ / ] pair. Shift = visualizer ring radius (+/- 0.25 m),
+        /// Ctrl = visualizer bar max height (+/- 0.25 m), plain = ScreenStereo (+/- 0.1).
+        /// Every accepted change is saved immediately (same as all hotkeyed prefs).
+        /// </summary>
+        private void TuneBracket(float dir, Keyboard keyboard)
+        {
+            bool shift = keyboard.leftShiftKey != null && keyboard.leftShiftKey.isPressed;
+            bool ctrl = keyboard.leftCtrlKey != null && keyboard.leftCtrlKey.isPressed;
+
+            if (shift)
+            {
+                float v = Mathf.Clamp(_settings.VisualizerRadius.Value + dir * 0.25f, 1.5f, 12f);
+                if (v != _settings.VisualizerRadius.Value)
                 {
-                    _settings.ScreenStereo.Value = v;
+                    _settings.VisualizerRadius.Value = v;
                     MelonLoader.MelonPreferences.Save();
-                    LoggerInstance.Msg("Screen stereo depth = " + v.ToString("F1") +
-                        " (the two UI images moved apart; 1.0 = true depth, above 1.0 = wider-than-eye).");
+                    LoggerInstance.Msg("Visualizer ring radius = " + v.ToString("F2") + " m" +
+                        (dir < 0 ? " (moved in toward you)" : " (pushed back out)") +
+                        " - Shift + the stereo keys tune it; Ctrl + them tune the bar height.");
                 }
+                return;
+            }
+
+            if (ctrl)
+            {
+                float v = Mathf.Clamp(_settings.VisualizerMaxHeight.Value + dir * 0.25f, 0.2f, 8f);
+                if (v != _settings.VisualizerMaxHeight.Value)
+                {
+                    _settings.VisualizerMaxHeight.Value = v;
+                    MelonLoader.MelonPreferences.Save();
+                    LoggerInstance.Msg("Visualizer bar max height = " + v.ToString("F2") + " m" +
+                        (dir < 0 ? " (shorter)" : " (taller)") + ".");
+                }
+                return;
+            }
+
+            float s = Mathf.Clamp(_settings.ScreenStereo.Value + dir * 0.1f, 0f, 50f);
+            if (s != _settings.ScreenStereo.Value)
+            {
+                _settings.ScreenStereo.Value = s;
+                MelonLoader.MelonPreferences.Save();
+                LoggerInstance.Msg("Screen stereo depth = " + s.ToString("F1") +
+                    (dir < 0
+                        ? " (the two UI images moved toward each other; 0 = flat screen)."
+                        : " (the two UI images moved apart; 1.0 = true depth, above 1.0 = wider-than-eye)."));
             }
         }
 
