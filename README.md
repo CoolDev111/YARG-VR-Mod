@@ -77,7 +77,8 @@ AutoRecenterOnCut = true  # re-anchor when the song cuts to another stage camera
 HeightLock = false        # keep YARG's authored eye height
 HeightOffset = 0          # meters of extra height for the stage camera
 PoseDebug = false         # logs head/root/screen poses every 5 s (diagnostics only)
-MenuEnvSurround = true    # menu background is centered ON YOU (360°) instead of behind the menu screen
+MenuEnvSurround = true    # 360° menu background sphere in the menus (v1.3.3)
+VisualizerOcclusion = true # bars hide when seen through the menu/HUD screens (v1.3.3)
 ```
 
 ## What you'll see
@@ -100,6 +101,33 @@ real object in the room). SteamVR's **Display Mirror** shows the stereo HMD imag
 * **Performance:** the stage is rendered twice (once per eye) at your desktop resolution and the
 game screen once per eye at compositor resolution. If it's heavy, set `StereoVenue = false`,
 lower YARG's *Venue Render Scale*, or lower `Supersample` to `0.9`–`1.0`.
+
+Building from source
+```bash
+# 1. fetch reference DLLs (MelonLoader + YARG Managed + openvr_api.dll)
+./setup-libs.sh            # optional arg: YARG version, default 0.15.0
+
+# 2. build (needs .NET SDK 8; works on Linux/Windows — no Windows targeting pack needed)
+./build.sh
+# -> bin/Release/YARG-VR.dll
+```
+CI (`.github/workflows/build.yml`) runs the same pipeline on every push and attaches a
+ready-to-install zip to GitHub Releases on tags.
+Repository layout
+```
+YARG-VR-Mod/
+├── YARG.VR.csproj                  # net472 class library → YARG-VR.dll
+├── src/
+│   ├── AssemblyInfo.cs             # MelonInfo / MelonGame("YARC","YARG")
+│   ├── VrMod.cs                    # MelonMod entry: prefs, hotkeys, scene lifecycle
+│   ├── VrSceneRig.cs               # stereo eye cameras, world-space screen, venue/highway stereo
+│   ├── OpenVrRuntime.cs            # openvr_api preload/init/poses/per-eye submit
+│   └── YargBridge.cs               # reflection bridge to YARG's CameraManager.CurrentCamera
+├── vendor/OpenVR/openvr_api.cs     # Valve's official C# binding (BSD-3-Clause)
+├── .github/workflows/build.yml     # CI: download real refs → build → artifact/release
+├── setup-libs.sh / build.sh        # local build helpers
+├── LICENSE (MIT) · NOTICE · .gitignore · README.md
+```
 
 ## License \& credits
 

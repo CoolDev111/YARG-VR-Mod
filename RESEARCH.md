@@ -100,6 +100,27 @@ Last updated: v1.2.2.
 - **v1.2.2**: the environment is anchored to the menu's own camera pose
   (`World anchored to YARG's camera '...'` log line), so distances and facing
   match the authored view; the several-cm menu offset is gone.
+- **v1.3.3 GROUND TRUTH (from YARG's repo sources, master branch)**:
+  - `Assets/Prefabs/Menu/MenuBackground.prefab` (placed directly in
+    `MenuScene.unity`) = `MenuBackground` root with children `[Directional
+    Light, Global Volume, Camera Container, Wall]`.
+  - `Camera Container` → `Main Camera` (FOV 60, ClearFlags = **Skybox**,
+    depth 0, renders to display 0, culling mask bits 0,1,2,4,5,6,7,9).
+  - `Wall` = a Unity built-in **quad** (2 m x 1 m), lying horizontal at y=0,
+    z = 5 (5 m in front of the camera) — the ONLY geometry. Material =
+    `Assets/Art/Materials/Menu/MenuBackground.mat`, shader
+    `Unlit/MenuBackground` (hand-written CG, renders fine under URP as
+    SRPDefaultUnlit): an animated gradient computed in **UV space** around
+    UV center with three orbiting color points (teal `_Color_SideA`, red
+    `_Color_SideB`, dark blue `_Color_Background`) + screen-space dither
+    noise. Because it is UV-based it maps correctly onto ANY mesh.
+  - `MainMenuBackground.Update()` **lerps `_cameraContainer` back to
+    (0, 0.5, 0) EVERY FRAME** (and offsets the camera local position with the
+    mouse) — any one-shot reposition by a mod is undone within a second.
+  - Consequence for VR: the eye cameras clear SOLID BLACK (no skybox), so the
+    headset showed only the menu screen + ring + a tiny quad — a void. The
+    menu "background" the user asked to surround them is the gradient look,
+    which the v1.3.3 sphere reproduces with YARG's own material.
 
 ## 10. World anchoring + the room root (v1.3.0)
 
@@ -132,20 +153,37 @@ Last updated: v1.2.2.
   = the "attached to the player" feel; identity at neutral pose = why recenters
   looked right at first). Fixed by un-transposing to `M_u = B·M_o·B`,
   B = diag(1,1,−1); verified numerically against a 90° left-turn pose.
-- **v1.3.2 — MENU SURROUND**: the menu background lookup
+- **v1.3.2 — MENU SURROUND (superseded by v1.3.3)**: the menu background lookup
   (`YARG.Menu.Main.MainMenuBackground`, fields verified from YARG 0.15
   Assembly-CSharp metadata: `Transform _cameraContainer`, `Camera _camera`)
   silently returned null at runtime in earlier versions — the world anchor fell
   back to 'Main Camera' and the menu room rendered from the wrong spot (read as
   a backdrop behind the menu UI). Now: inactive-inclusive component search,
   container-camera fallback, and one-shot diagnostic logging of what resolved.
-  When the bound world camera IS the menu background camera and
-  `MenuEnvSurround` is on (default), `_worldCamAuthoredPos` is overridden with
-  the `_cameraContainer` position (the environment's authored player spot) —
-  the player stands in the middle of the menu room (360° surround). Rotation
-  still uses the camera's flattened yaw via the unchanged `ReanchorWorld` math,
-  so F9 re-faces the environment. Gameplay is unaffected: "Camera (No Venue)"
-  wins candidate priority during songs (venue takeover untouched).
+  The container-override idea itself was a no-op (see section 9) and was
+  removed again in v1.3.3; the lookup hardening stays.
+- **v1.3.3 — VISUALIZER OCCLUSION**: uGUI never writes depth, so the ring's
+  bars (r = 2.7 m, BEHIND the ~2 m screen) painted straight over the menus
+  ("bars poke through the menus"). Fix: `UpdateVisualizerOcclusion(headPosA)`
+  runs after `UpdateVisualizer` each tick; every bar is segment-tested against
+  every active world-space screen (converted canvases + the pop-out HUD plane):
+  if the head→bar segment crosses a screen's rect (canvas-local units, 0.25 m
+  margin), the bar's renderer is disabled that frame. Off-axis-safe (plane
+  crossing point, not bar-center-in-rect). Bars in front of/beside/behind the
+  player still render. `VisualizerOcclusion` pref (default true).
+- **v1.3.3 — MENU SURROUND SPHERE**: replaces v1.3.2's container anchor. A
+  child of the room root: inward-facing sphere mesh (elevation −80°..+90°,
+  48x20 grid, seam-duplicated UV column, triangles wound for Unity's clockwise-
+  from-inside front faces), radius 6 m (outside the ring's 2.7 m and the authored
+  Wall's 5 m, inside the 50 m far clip), layer 5, material = YARG's OWN
+  `Unlit/MenuBackground` material (resolved from the MenuBackground prefab's
+  Wall renderer; `Shader.Find` fallback creates an owned material).
+  Visible exactly while `_worldCam == _menuBgCamera` (menus; never during a
+  song — venue owns the world), gated by `MenuEnvSurround` (default true);
+  SetActive toggled per tick; F9 carries it with the room root. Log lines:
+  `Menu background camera bound ...` (bind) and
+  `Menu background sphere created (r=6.0 m ...)` (build), plus a one-shot
+  warning if the material cannot be resolved.
 
 ## 11. Preferences (MelonLoader config)
 
@@ -161,7 +199,8 @@ Last updated: v1.2.2.
 | `DesktopMirror` | true | game window shows headset view |
 | `VisualizerGain` | 1.0 | |
 | `PoseDebug` | false | v1.3.0: 5 s pose logging for diagnostics |
-| `MenuEnvSurround` | true | v1.3.2: menu background centered on the player (360°) instead of authored backdrop view |
+| `MenuEnvSurround` | true | v1.3.3: 360° menu background sphere in the menus (YARG's own menu gradient material) |
+| `VisualizerOcclusion` | true | v1.3.3: hide visualizer bars seen through the menu/HUD screens |
 
 Startup log prints `YARG VR <version>` plus `Screen mode:`, `world visible:`,
 `desktop mirror:` lines. Diagnose from these, not guesses.
@@ -192,3 +231,4 @@ Startup log prints `YARG VR <version>` plus `Screen mode:`, `world visible:`,
 | 1.3.0 | room root ("invisible cube"): screen/HUD/ring parented to one anchor that only F9/scene changes move (structural room-lock); visualizer ring surrounds the player again (front arc behind the screen plane); PoseDebug pref |
 | 1.3.1 | **reversed look-around root cause** — `OpenVrToUnity` (OpenVrRuntime.cs) built the rotation block TRANSPOSED (`m01=e.m4` instead of `e.m1`, …); for pure rotations transpose = inverse, so every HMD pose was handed to the cameras rotated the opposite way on ALL axes (left=right, up=down; world/venue counter-swing felt "attached to the player"). Invisible at the neutral (identity) pose, which is why recenters looked right at first. Un-transposed to `M_u = B·M_o·B`, B = diag(1,1,−1); verified numerically against a 90° left-turn pose and the SteamVR plugin's reference conversion. Also explains why v1.2.1's "yaw sign" and v1.2.2's pitch/roll-zeroing patches never fixed the reversal |
 | 1.3.2 | menu backgrounds surround the player — menu-bg camera lookup hardened (inactive-inclusive, container fallback, one-shot diagnostics) after it silently failed and fell back to 'Main Camera'; when bound to it, the world anchor position is overridden with the `MainMenuBackground._cameraContainer` position (the environment's authored player spot) so the menu room wraps around the player 360°; `MenuEnvSurround` pref (default on); F9 re-faces; gameplay unchanged |
+| 1.3.3 | **v1.3.2 surround had no visible effect (confirmed in-headset)** — ground truth from YARG's repo: the menu background is only a camera (skybox clear) + one 2x1 m glowing quad + a container that `MainMenuBackground.Update()` lerps back to (0, 0.5, 0) EVERY FRAME (our one-shot re-anchor was instantly undone, and the eye cameras' solid-black clear showed none of the skybox). Fixes: (1) **menu surround sphere** — inward-facing r=6 m sphere under the room root using YARG's own UV-based `Unlit/MenuBackground` animated gradient material, shown only while the menu bg camera is the bound world camera (never during songs), `MenuEnvSurround` gates it; v1.3.2's container-anchor override removed (anchor back to the camera's authored pose); (2) **visualizer occlusion** — uGUI writes no depth so ring bars painted over the menus; every bar is now per-frame segment-tested against every world-space screen rect (converted canvases + pop-out HUD plane) and its renderer disabled while seen through one; `VisualizerOcclusion` pref (default on). Tester also confirmed the v1.3.1 pose fix works (menus no longer follow the player, seated feel correct) |
