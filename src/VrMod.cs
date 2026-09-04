@@ -23,6 +23,7 @@ namespace YargVr
         public MelonLoader.MelonPreferences_Entry<bool> HudPopOut;
         public MelonLoader.MelonPreferences_Entry<float> HudPopDistance;
         public MelonLoader.MelonPreferences_Entry<bool> HudPopMigrated;
+        public MelonLoader.MelonPreferences_Entry<bool> DefaultsMigrated;
         public MelonLoader.MelonPreferences_Entry<bool> Visualizer;
         public MelonLoader.MelonPreferences_Entry<float> VisualizerGain;
         public MelonLoader.MelonPreferences_Entry<float> VisualizerRadius;
@@ -55,6 +56,10 @@ namespace YargVr
     /// v1.3.18: ALL instrument/controller fixing logic was removed (device probe, watcher,
     /// auto-reconnect, auto-bind, absence watchdog, Windows re-scan, HID liveness) - the mod
     /// is a pure VR renderer again; controllers are YARG's own business.
+    ///
+    /// v1.3.19: screen defaults re-tuned - HudDistance 3.0 m (was 2.0) and ScreenStereo 1.0
+    /// (was 8.4; 1.0 = full-IPD, physically true depth). Existing configs are migrated once
+    /// (guard: DefaultsMigrated).
     ///
     /// VR is active in EVERY scene (menus included): the world-space game screen shows the
     /// game at all times; the stage camera takeover engages when a venue camera exists.
@@ -101,7 +106,7 @@ namespace YargVr
 
             HookSceneEvents(true);
 
-            LoggerInstance.Msg("YARG-VR 1.3.18 initialized (true stereo).");
+            LoggerInstance.Msg("YARG-VR 1.3.19 initialized (true stereo).");
             LoggerInstance.Msg("  Hotkeys: " + _settings.KeyToggle.Value + " = toggle VR, " +
                 _settings.KeyRecenter.Value + " = recenter / re-place screen, " +
                 _settings.KeyScreenCloser.Value + "/" + _settings.KeyScreenFarther.Value +
@@ -140,17 +145,18 @@ namespace YargVr
                 "Re-anchors the stage view and re-places the game screen in front of you (at eye height, level).");
             _settings.HudScale = cat.CreateEntry<float>("HudScale", 1.0f, "HUD scale",
                 "Scales the head-locked game view / HUD. 1.0 matches the desktop layout.");
-            _settings.HudDistance = cat.CreateEntry<float>("HudDistance", 2.0f, "Screen distance (m)",
-                "Distance of the game screen from your head (re-applied on recenter / scene change).");
+            _settings.HudDistance = cat.CreateEntry<float>("HudDistance", 3.0f, "Screen distance (m)",
+                "Distance of the game screen from your head (re-applied on recenter / scene change). " +
+                "v1.3.19 default 3.0 m (was 2.0 m); existing configs are migrated once.");
             _settings.HudFov = cat.CreateEntry<float>("HudFov", 0f, "Screen FOV (0 = auto)",
                 "FOV used to size the game screen. 0 = use the HMD's eye FOV reported by OpenVR.");
-            _settings.ScreenStereo = cat.CreateEntry<float>("ScreenStereo", 8.4f, "Screen stereo depth",
+            _settings.ScreenStereo = cat.CreateEntry<float>("ScreenStereo", 1.0f, "Screen stereo depth",
                 "How far apart the two screen renders are (0 = flat screen, zero double vision; " +
                 "1 = full IPD, physically true depth; above 1 = wider-than-eye separation - " +
-                "fuses screen content at a closer distance). Default 8.4 = the tuned fusion " +
-                "point where the UI merges cleanly on the reference rig; press [ / ] live to " +
-                "find your own (each press saves). Lower it if the screen content looks " +
-                "slightly doubled or blurry.");
+                "fuses screen content at a closer distance). Default 1.0 (v1.3.19; the old 8.4 " +
+                "tuned-fusion default existed to compensate for the pre-1.3.15 projection " +
+                "fallback and is migrated once) - press [ / ] live to find your own (each press " +
+                "saves). Lower it if the screen content looks slightly doubled or blurry.");
             // NOTE: renamed from "ScreenBillboard" in v1.2.2 so stale configs that had it
             // enabled fall back to the intended default (room-locked).
             _settings.ScreenFollowsView = cat.CreateEntry<bool>("ScreenFollowsView", false, "Screen follows view",
@@ -173,6 +179,9 @@ namespace YargVr
                 "which made 1.2 m read as in-your-face; existing configs are migrated once.");
             _settings.HudPopMigrated = cat.CreateEntry<bool>("HudPopMigrated", false, "HUD pop distance migrated (internal)",
                 "One-shot guard for the v1.3.17 HudPopDistance migration (1.2 -> 1.8 m). Do not edit.");
+            _settings.DefaultsMigrated = cat.CreateEntry<bool>("DefaultsMigrated", false, "Screen defaults migrated (internal)",
+                "One-shot guard for the v1.3.19 defaults migration (HudDistance 3.0 m, " +
+                "ScreenStereo 1.0). Do not edit.");
             _settings.Visualizer = cat.CreateEntry<bool>("Visualizer", true, "Audio visualizer ring",
                 "A ring of audio-reactive bars around your play space, bouncing to the song. " +
                 "Turn OFF for a plain black void.");
@@ -244,6 +253,22 @@ namespace YargVr
                         "(real stereo depth made 1.2 m feel too close). Press F9 to re-place; " +
                         "HudPopDistance in the cfg tunes it.");
                 }
+                MelonLoader.MelonPreferences.Save();
+            }
+
+            // v1.3.19 one-time migration: the screen defaults are re-tuned for the
+            // post-projection-fix renderer - the game screen sits farther out (3 m) and the
+            // stereo separation is the physically-true full-IPD value (1.0) instead of the old
+            // 8.4 fusion hack that compensated for the pre-v1.3.15 symmetric-FOV fallback.
+            // Requested explicitly; existing values are overwritten once (guard: DefaultsMigrated).
+            if (!_settings.DefaultsMigrated.Value)
+            {
+                _settings.DefaultsMigrated.Value = true;
+                _settings.HudDistance.Value = 3.0f;
+                _settings.ScreenStereo.Value = 1.0f;
+                LoggerInstance.Msg("v1.3.19: screen defaults re-tuned - HudDistance = 3.0 m, " +
+                    "ScreenStereo = 1.0 (full IPD, true depth). Press F9 to re-place the screen; " +
+                    "[ / ] still tune ScreenStereo live (each press saves).");
                 MelonLoader.MelonPreferences.Save();
             }
 
