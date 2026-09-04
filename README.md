@@ -102,7 +102,8 @@ real object in the room). SteamVR's **Display Mirror** shows the stereo HMD imag
 game screen once per eye at compositor resolution. If it's heavy, set `StereoVenue = false`,
 lower YARG's *Venue Render Scale*, or lower `Supersample` to `0.9`–`1.0`.
 
-Building from source
+## Building from source
+
 ```bash
 # 1. fetch reference DLLs (MelonLoader + YARG Managed + openvr_api.dll)
 ./setup-libs.sh            # optional arg: YARG version, default 0.15.0
@@ -113,7 +114,9 @@ Building from source
 ```
 CI (`.github/workflows/build.yml`) runs the same pipeline on every push and attaches a
 ready-to-install zip to GitHub Releases on tags.
-Repository layout
+
+## Repository layout
+
 ```
 YARG-VR-Mod/
 ├── YARG.VR.csproj                  # net472 class library → YARG-VR.dll
