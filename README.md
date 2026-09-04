@@ -76,7 +76,9 @@ HeightLock = false        # keep YARG's authored eye height
 HeightOffset = 0          # meters of extra height for the stage camera
 PoseDebug = false         # logs head/root/screen poses every 5 s (diagnostics only)
 MenuEnvSurround = true    # 360° menu background sphere in the menus (v1.3.3)
-VisualizerOcclusion = true # bars hide when seen through the menu/HUD screens (v1.3.3)
+VisualizerOcclusion = true # song: bars hidden when seen through screens; menu: ring arranged so it cannot block
+VisualizerInMenu = true   # menu ring: ON = visible low-profile (short bars, 3.2 m out); OFF = hidden entirely (v1.3.6)
+OpenVrProjection = true   # eye cameras use OpenVR's per-eye frusta (v1.3.6; fixes UI doubling)
 ```
 
 ## What you'll see

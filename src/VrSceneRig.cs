@@ -181,6 +181,11 @@ namespace YargVr
         private readonly List<Billboard> _billboards = new List<Billboard>();
         private int _nextCanvasScanFrame;
 
+        // v1.3.8: per-eye OpenVR projection retry state (see RetryOpenVrProjections).
+        private bool _openVrProjApplied;
+        private int _openVrProjAttempts;
+        private float _openVrProjNextAttempt;
+
         #endregion
 
         #region Venue takeover + per-eye venue rendering
@@ -429,9 +434,127 @@ namespace YargVr
             _eyeCamL = MakeEyeCamera("YARG-VR Eye Camera L", _rtL, fov, 1000f);
             _eyeCamR = MakeEyeCamera("YARG-VR Eye Camera R", _rtR, fov, 1001f);
 
+            // v1.3.6: replace the symmetric per-eye FOV with OpenVR's ACTUAL per-eye frusta
+            // (asymmetric - more temple-side than nose-side). A symmetric render submitted
+            // full-bounds lands horizontally shifted on each lens, which reads as the two
+            // eye images / UI copies not lining up ("horrible doubling"). Skipped when the
+            // user explicitly overrode the screen FOV (HudFov > 1) or turned the feature off.
+            // v1.3.8: the first attempt happens here, but a failure is no longer permanent -
+            // LateTick retries every 1 s until OpenVR serves usable frusta (the user's log
+            // showed GetProjectionRaw returning degenerate values ~16 ms after init, which
+            // looks like a transient on headset-driven runtimes such as Quest Link).
+            _openVrProjApplied = false;
+            _openVrProjAttempts = 0;
+            _openVrProjNextAttempt = 0f;
+            if (_settings.OpenVrProjection.Value && _settings.HudFov.Value <= 1f)
+            {
+                if (TryApplyOpenVrEyeProjections(out string failDetail))
+                {
+                    _openVrProjApplied = true;
+                    LogOpenVrProjectionSuccess(null);
+                }
+                else
+                {
+                    MelonLoader.MelonLogger.Msg("[YARG-VR] OpenVR per-eye projections unavailable (" + failDetail +
+                        ") - keeping the symmetric eye FOV (" + _eyeCamL.fieldOfView.ToString("F1") +
+                        " deg); will retry every 1 s.");
+                }
+            }
+
             // The rig persists across scene changes so the screen is always up in the headset.
             UnityEngine.Object.DontDestroyOnLoad(_eyeCamL.gameObject);
             UnityEngine.Object.DontDestroyOnLoad(_eyeCamR.gameObject);
+        }
+
+        /// <summary>
+        /// Assigns each eye camera the off-axis projection built from OpenVR's
+        /// GetProjectionRaw tangents (via Unity's Matrix4x4.Frustum, GL depth convention,
+        /// which Unity converts per platform). Geometrically exact: every world point lands
+        /// with precisely the disparity its depth implies, so the UI plane fuses at its true
+        /// distance and the compositor/lens mismatch disappears. Returns false without
+        /// touching the cameras when OpenVR cannot provide usable raw frusta (the caller
+        /// keeps the symmetric FOV and, since v1.3.8, retries).
+        /// </summary>
+        private bool TryApplyOpenVrEyeProjections(out string failDetail)
+        {
+            const float near = 0.01f;
+            const float far = 50f;
+
+            failDetail = null;
+            float ll, lr, lt, lb, rl, rr, rt, rb;
+            bool okL = OpenVrRuntime.TryGetEyeProjectionRaw(EVREye.Eye_Left, out ll, out lr, out lt, out lb);
+            bool okR = OpenVrRuntime.TryGetEyeProjectionRaw(EVREye.Eye_Right, out rl, out rr, out rt, out rb);
+            if (!okL || !okR)
+            {
+                // v1.3.8: carry the RAW values out - NaN / zeros / swapped values each tell
+                // a different story and the earlier silent boolean hid all of them.
+                failDetail = "raw L(l=" + ll.ToString("R") + ", r=" + lr.ToString("R") + ", t=" + lt.ToString("R") +
+                             ", b=" + lb.ToString("R") + ") R(l=" + rl.ToString("R") + ", r=" + rr.ToString("R") +
+                             ", t=" + rt.ToString("R") + ", b=" + rb.ToString("R") + ")";
+                return false;
+            }
+
+            _eyeCamL.projectionMatrix = Matrix4x4.Frustum(ll * near, lr * near, lb * near, lt * near, near, far);
+            _eyeCamR.projectionMatrix = Matrix4x4.Frustum(rl * near, rr * near, rb * near, rt * near, near, far);
+            return true;
+        }
+
+        private void LogOpenVrProjectionSuccess(int? retryAttempt)
+        {
+            const float near = 0.01f;
+
+            // Reconstruct the applied frustum spans from the matrices we just wrote.
+            // Matrix4x4.Frustum(left, right, bottom, top, near, far) maps to m00 = 2n/(r-l),
+            // m02 = (r+l)/(r-l), m11 = 2n/(t-b), m12 = (t+b)/(t-b).
+            float lSpan = (2f * near) / _eyeCamL.projectionMatrix.m00;
+            float lCenter = _eyeCamL.projectionMatrix.m02 * lSpan * 0.5f;
+            float rSpan = (2f * near) / _eyeCamR.projectionMatrix.m00;
+            float rCenter = _eyeCamR.projectionMatrix.m02 * rSpan * 0.5f;
+            float hFovL2 = Mathf.Atan(lSpan / (2f * near)) * Mathf.Rad2Deg;
+            float hFovR2 = Mathf.Atan(rSpan / (2f * near)) * Mathf.Rad2Deg;
+            float asymL = Mathf.Atan(lCenter / near) * Mathf.Rad2Deg;
+            float asymR = Mathf.Atan(rCenter / near) * Mathf.Rad2Deg;
+            MelonLoader.MelonLogger.Msg(string.Format(
+                "[YARG-VR] Per-eye OpenVR projections applied{0} (L: {1:F1} deg wide, center {2:+0.#;-0.#;0} deg; " +
+                "R: {3:F1} deg wide, center {4:+0.#;-0.#;0} deg) - the rendered image now matches the lenses " +
+                "exactly, removing the systematic horizontal shift that read as UI doubling.",
+                retryAttempt.HasValue ? " on retry #" + retryAttempt.Value : "",
+                hFovL2, asymL, hFovR2, asymR));
+        }
+
+        /// <summary>
+        /// v1.3.8: called every LateTick while VR is live. Until the per-eye projections
+        /// have been applied, retry OpenVR's GetProjectionRaw once per second - the first
+        /// read after compositor init can return degenerate tangents on some runtimes, and
+        /// the v1.3.6 build treated that as permanent.
+        /// </summary>
+        private void RetryOpenVrProjections()
+        {
+            if (_openVrProjApplied || _eyeCamL == null ||
+                !_settings.OpenVrProjection.Value || _settings.HudFov.Value > 1f)
+            {
+                return;
+            }
+
+            if (Time.unscaledTime < _openVrProjNextAttempt)
+            {
+                return;
+            }
+
+            _openVrProjNextAttempt = Time.unscaledTime + 1f;
+            _openVrProjAttempts++;
+
+            string failDetail;
+            if (TryApplyOpenVrEyeProjections(out failDetail))
+            {
+                _openVrProjApplied = true;
+                LogOpenVrProjectionSuccess(_openVrProjAttempts);
+            }
+            else if (_openVrProjAttempts == 10 || _openVrProjAttempts == 60)
+            {
+                MelonLoader.MelonLogger.Warning("[YARG-VR] Per-eye projections still unavailable after " +
+                    _openVrProjAttempts + " retries (" + failDetail + ").");
+            }
         }
 
         private static RenderTexture CreateEyeTexture(string name, int w, int h)
@@ -1255,6 +1378,10 @@ namespace YargVr
                 return;
             }
 
+            // v1.3.8: self-heal the per-eye projections if the initial GetProjectionRaw
+            // read was degenerate (cheap no-op once applied).
+            RetryOpenVrProjections();
+
             // Pick up canvases that spawned after scene load (throttled to every ~2 s).
             if (Time.frameCount >= _nextCanvasScanFrame)
             {
@@ -1290,7 +1417,13 @@ namespace YargVr
             float halfIpd = OpenVrRuntime.HasEyeGeometry
                 ? (Mathf.Abs(OpenVrRuntime.EyeOffsetLeft.x) + Mathf.Abs(OpenVrRuntime.EyeOffsetRight.x)) * 0.5f
                 : 0.0315f;
-            halfIpd *= Mathf.Clamp(_settings.ScreenStereo.Value, 0f, 1f);
+            // v1.3.11: max raised to 50 (user-requested headroom; v1.3.10 capped at 3.0 and
+            // the user still needed more). Values above 1.0 are wider-than-eye separation
+            // (hyper-stereo). Content painted on the screen plane then fuses at
+            // screenDistance / ScreenStereo. NOTE: a working sweet spot far above ~2 usually
+            // means a systematic per-eye shift elsewhere (e.g. OpenVR projections unavailable
+            // -> symmetric-FOV fallback) that ss is compensating for - check the log.
+            halfIpd *= Mathf.Clamp(_settings.ScreenStereo.Value, 0f, 50f);
             Vector3 headRightA = headRotA * Vector3.right;
             _eyeCamL.transform.SetPositionAndRotation(headPosA - headRightA * halfIpd, headRotA);
             _eyeCamR.transform.SetPositionAndRotation(headPosA + headRightA * halfIpd, headRotA);
@@ -1984,6 +2117,16 @@ namespace YargVr
             // Local space: the ring is a child of the room root since v1.3.0.
             _visualizer.transform.Rotate(Vector3.up, 3f * dt, Space.Self);
 
+            // v1.3.12: in the menus the ring stays VISIBLE but low-profile (needs
+            // VisualizerOcclusion + VisualizerInMenu ON): bars are capped short and the ring
+            // is pushed out to 3.2 m, so it hugs the floor well below the menu panels (which
+            // float at eye height) and can never cover them. Gameplay keeps the full ring.
+            bool menuSafe = _settings.VisualizerOcclusion.Value &&
+                            _settings.VisualizerInMenu.Value &&
+                            _menuBgComponent != null;
+            float maxH = menuSafe ? 0.75f : VisMaxHeight;
+            float radius = menuSafe ? 3.2f : VisRadius;
+
             float gain = Mathf.Clamp(_settings.VisualizerGain.Value, 0.1f, 5f);
 
             for (int i = 0; i < VisBarCount; i++)
@@ -2024,11 +2167,11 @@ namespace YargVr
 
                 _visAmp[i] = target > _visAmp[i] ? target : Mathf.Max(target, _visAmp[i] - dt * 2.2f);
 
-                float h = 0.06f + _visAmp[i] * VisMaxHeight;
+                float h = 0.06f + _visAmp[i] * maxH;
                 float a = (float)i / VisBarCount * Mathf.PI * 2f;
                 _visBars[i].localScale = new Vector3(0.16f, h, 0.16f);
                 _visBars[i].localPosition = new Vector3(
-                    Mathf.Cos(a) * VisRadius, h * 0.5f, Mathf.Sin(a) * VisRadius);
+                    Mathf.Cos(a) * radius, h * 0.5f, Mathf.Sin(a) * radius);
                 _visMats[i].color = _visBase[i] * (0.25f + 0.85f * _visAmp[i]);
             }
         }
@@ -2082,6 +2225,36 @@ namespace YargVr
             }
 
             bool occlusionOn = _settings.VisualizerOcclusion.Value;
+            bool inMenu = _menuBgComponent != null;
+
+            // v1.3.6: while YARG's MainMenuBackground component exists, the menu and its
+            // panels are up. The v1.3.3 ray/rect occlusion only removed bars seen THROUGH a
+            // screen rectangle - in the menu the bars around the screen kept "blocking the
+            // main menu", so v1.3.6 hid the ring ENTIRELY there. v1.3.12 splits the two
+            // behaviors: VisualizerInMenu ON (default) keeps the ring visible in the menus
+            // in a low-profile arrangement (UpdateVisualizer caps the bars at 0.75 m and
+            // pushes the ring out to 3.2 m - below the eye-height panels), while OFF
+            // restores the v1.3.6 full hide. Gameplay keeps the through-screen occlusion.
+            bool menuHideAll = occlusionOn && inMenu && !_settings.VisualizerInMenu.Value;
+            bool menuContext = occlusionOn && inMenu;
+
+            if (menuContext && !_menuContextLogged)
+            {
+                _menuContextLogged = true;
+                MelonLoader.MelonLogger.Msg(menuHideAll
+                    ? "[YARG-VR] Main menu context - visualizer ring hidden (VisualizerInMenu = false)."
+                    : "[YARG-VR] Main menu context - visualizer ring low-profile (short bars, pushed out; cannot block the menu).");
+            }
+            else if (!menuContext && _menuContextLogged)
+            {
+                _menuContextLogged = false;
+                if (_menuBarsWereHidden)
+                {
+                    MelonLoader.MelonLogger.Msg("[YARG-VR] Left the menu context - visualizer ring back at full height.");
+                }
+            }
+            _menuBarsWereHidden = menuHideAll;
+
             for (int i = 0; i < VisBarCount; i++)
             {
                 MeshRenderer rend = _visRenderers[i];
@@ -2091,10 +2264,18 @@ namespace YargVr
                     continue;
                 }
 
-                bool visible = true;
-                if (occlusionOn)
+                bool visible;
+                if (menuHideAll)
+                {
+                    visible = false;
+                }
+                else if (occlusionOn)
                 {
                     visible = !IsPointHiddenBehindScreens(headPos, bar.position);
+                }
+                else
+                {
+                    visible = true;
                 }
 
                 if (rend.enabled != visible)
@@ -2103,6 +2284,9 @@ namespace YargVr
                 }
             }
         }
+
+        private bool _menuContextLogged;
+        private bool _menuBarsWereHidden;
 
         /// <summary>
         /// True when the ray head -> point crosses any active world-space screen rectangle

@@ -232,3 +232,149 @@ Startup log prints `YARG VR <version>` plus `Screen mode:`, `world visible:`,
 | 1.3.1 | **reversed look-around root cause** — `OpenVrToUnity` (OpenVrRuntime.cs) built the rotation block TRANSPOSED (`m01=e.m4` instead of `e.m1`, …); for pure rotations transpose = inverse, so every HMD pose was handed to the cameras rotated the opposite way on ALL axes (left=right, up=down; world/venue counter-swing felt "attached to the player"). Invisible at the neutral (identity) pose, which is why recenters looked right at first. Un-transposed to `M_u = B·M_o·B`, B = diag(1,1,−1); verified numerically against a 90° left-turn pose and the SteamVR plugin's reference conversion. Also explains why v1.2.1's "yaw sign" and v1.2.2's pitch/roll-zeroing patches never fixed the reversal |
 | 1.3.2 | menu backgrounds surround the player — menu-bg camera lookup hardened (inactive-inclusive, container fallback, one-shot diagnostics) after it silently failed and fell back to 'Main Camera'; when bound to it, the world anchor position is overridden with the `MainMenuBackground._cameraContainer` position (the environment's authored player spot) so the menu room wraps around the player 360°; `MenuEnvSurround` pref (default on); F9 re-faces; gameplay unchanged |
 | 1.3.3 | **v1.3.2 surround had no visible effect (confirmed in-headset)** — ground truth from YARG's repo: the menu background is only a camera (skybox clear) + one 2x1 m glowing quad + a container that `MainMenuBackground.Update()` lerps back to (0, 0.5, 0) EVERY FRAME (our one-shot re-anchor was instantly undone, and the eye cameras' solid-black clear showed none of the skybox). Fixes: (1) **menu surround sphere** — inward-facing r=6 m sphere under the room root using YARG's own UV-based `Unlit/MenuBackground` animated gradient material, shown only while the menu bg camera is the bound world camera (never during songs), `MenuEnvSurround` gates it; v1.3.2's container-anchor override removed (anchor back to the camera's authored pose); (2) **visualizer occlusion** — uGUI writes no depth so ring bars painted over the menus; every bar is now per-frame segment-tested against every world-space screen rect (converted canvases + pop-out HUD plane) and its renderer disabled while seen through one; `VisualizerOcclusion` pref (default on). Tester also confirmed the v1.3.1 pose fix works (menus no longer follow the player, seated feel correct) |
+
+## 14. v1.3.4 — Input device probe (guitar dies when SteamVR boots first)
+
+Report: a physical guitar controller works only if it CONNECTS BEFORE SteamVR boots.
+Boot order game -> SteamVR -> connect guitar => guitar never reaches YARG.
+Boot order game -> connect guitar -> SteamVR => guitar works (even with SteamVR live).
+VR controllers are invisible to YARG either way (expected: no VR-controller device layouts).
+
+Mechanism hypotheses (to be discriminated by the F7 probe dump):
+- H1 OS/driver level: SteamVR's BLE/lighthouse scanning or Steam Input claims/hides the
+  device at connect time. Prediction: all 4 XInput slots empty in the dump despite the
+  guitar being paired in Windows; joy.cpl may show it but HID open fails.
+- H2 Unity InputSystem level: Unity's hot-plug enumeration misses the device when it
+  appears while vrserver holds HID handles. Prediction: XInput slot CONNECTED, device
+  ABSENT from InputSystem.devices.
+- H3 YARG level: device present in InputSystem.devices but YARG never claims it.
+  Prediction: both the slot and the device list show it. Fix would be YARG-side
+  (or a mod-side input injection - heavy, last resort).
+
+Implementation (src/DeviceProbe.cs, log-only, no mutation):
+- F7 (pref KeyProbe) -> Dump(); also dumps once at startup and once when OpenVR connects.
+- XInput: P/Invoke XInputGetState via xinput1_4.dll -> xinput1_3.dll -> xinput9_1_0.dll
+  fallback chain, slots 0-3, flat 16-byte XINPUT_STATE, reports packet/buttons/triggers or
+  ERROR_DEVICE_NOT_CONNECTED (1167).
+- InputSystem: direct typed read of InputSystem.devices (compile-time ref already in csproj);
+  per device: deviceId, layout, displayName, name, enabled, description (deviceClass /
+  manufacturer / product) - enough to identify a guitar without reflection.
+- All lines prefixed [YARG-VR][probe] for easy log filtering.
+
+Decision table for triage: slot CONNECTED + no Unity device => H2; both present => H3;
+all slots empty => H1 (try: SteamVR Settings -> Bluetooth off, Steam Input per-game
+"Disable Steam Input", different USB port for dongles).
+
+v1.3.4 changes: DeviceProbe.cs added; VrMod: KeyProbe pref (default F7), startup/steamvr-connected
+probes, F7 handler, version strings; README: F7 rows + guitar troubleshooting entry; version 1.3.4
+in AssemblyInfo (x3) + init log. No rendering or pose-path changes - safe for public release.
+
+## 15. v1.3.5 — Probe v2 + F6 reconnect; YARG claim chain reverse-engineered
+
+First probe data (v1.3.4, user log 14:01):
+- Guitar WAS in InputSystem.devices as YARG's own custom layout XboxOneRiffmasterGuitar
+  (deviceId 28, enabled) - enumeration is NOT the failure anymore.
+- XInput DllImport chain failed on Mono ("no XInput DLL loadable") - xinput1_4/1_3/9_1_0
+  all unresolved via DllImport. Fixed in v1.3.5 with kernel32 LoadLibrary/GetProcAddress +
+  Marshal.GetDelegateForFunctionPointer (kernel32 always resolves under Mono).
+- FOUR XInputControllerWindows devices present - real controllers or virtuals; probe v2
+  reports per-slot packet deltas to discriminate live vs ghost.
+
+YARG claim chain (sources re-fetched from master; NAMES verified against 0.15.0 assemblies
+via System.Reflection.Metadata - note: 0.15.0 has ProfileBindings in namespace YARG.Input
+and YargProfile in YARG.Core.Package.dll, differing from master):
+1. InputManager.OnEvent (subscribed to InputSystem.onEvent) ignores Keyboard/Mouse/Pen.
+2. For an unregistered device, on the first changed ButtonControl that is not noisy:
+   eventPtr.handled = PlayerContainer.TryConnectProfile(device).
+3. TryConnectProfile: IsDeviceTaken? -> GetProfileForDevice -> CreatePlayerFromProfile(profile, true).
+4. GetProfileForDevice matches profiles via ProfileBindings.MatchesDevice(device):
+   _unresolvedDevices (from bindings.json) match by Layout == device.layout AND
+   Hash == device.GetHash(); hash = SHA1(description.ToJson()) with the XInput
+   userIndex stripped (regex on interfaceName == "XInput").
+
+Silent-death implication: if the dongle re-enumerates the guitar with any changed
+description field (capabilities/product/serial...) depending on boot order, the hash
+changes, NO profile matches, and YARG stays dead with zero log output. Alternative
+branch: raw events never arrive (ghost device) - also silent.
+
+v1.3.5 implementation (src/DeviceProbe.cs):
+- F7 dump v2: XInput via kernel32 delegate (two samples 0.3 s apart, packet delta =
+  stream LIVE vs IDLE); device list now includes description fields (iface/class/mfr/
+  product/serial/version/caps) + yargHash per instrument (BindingSerialization.GetHash
+  via reflection); YARG introspection: profiles directory path, InputManager.
+  _registeredDevices contents, profiles list (Name/Id/IsBot/GameMode/AutoConnectOrder/
+  LastUsed), profile x device MATCH MATRIX (ProfileBindings.MatchesDevice via reflection,
+  annotated [in use]/[free] via IsProfileTaken), active players + their bound devices.
+- 5 s InputSystem.onEvent capture (subscribed only during the window; per-device total +
+  state/delta counts; handler fully try/caught so it can never break input).
+- F6 ReconnectInstruments (new KeyReconnect pref, default F6): for every non-KB/Mouse/
+  Touch/Pen device: IsDeviceTaken -> "already claimed"; GetProfileForDevice == null ->
+  "NO matching profile" explanation; else PlayerContainer.TryConnectProfile (PUBLIC,
+  non-destructive, same call YARG makes) -> "profile CONNECTED". VrMod.Tick drives
+  capture finalize + second XInput sample.
+- Reflection handles verified against 0.15.0 metadata: PlayerContainer
+  (Profiles/Players/ProfilesDirectory public props; GetProfileForDevice/IsDeviceTaken/
+  TryConnectProfile/IsProfileTaken public static), BindingsContainer.GetBindingsForProfile
+  public, ProfileBindings.MatchesDevice public instance, BindingSerialization.GetHash
+  public static, YargProfile public fields. All lookups null-tolerant with one-shot
+  diagnostics if YARG versions drift.
+
+Decision table v2:
+- XInput slot LIVE + device present + events flow + NO matching profile => hash mismatch
+  (boot-order-dependent description change). Fix candidates: re-create/re-bind profile;
+  future mod-side hash repair (rewrite _unresolvedDevices Hash) or private
+  CreateProfileFromDevice invocation.
+- Slot LIVE + ZERO events in capture => Unity stream dead => dongle/USB-level; replug.
+- All slots empty => OS/driver level (SteamVR BLE / dongle power management).
+- "already claimed but dead in-game" => YARG-side binding issue; dump the player's
+  bound devices + bindings.json.
+
+v1.3.5 changes: DeviceProbe.cs rewritten; VrMod: KeyReconnect pref + F6 handler + Tick
+hook + version/init 1.3.5; AssemblyInfo 1.3.5.0 x3. Build 0/0, DLL 359,424 B.
+
+## 16. v1.3.6 — Crash response, per-eye projections, menu ring (user report round 3)
+
+User v1.3.5 log findings:
+- Guitar WAS enumerated (GameInput iface, layout XboxOneRiffmasterGuitar, id 28,
+  enabled=True) AND produced 3 events in the second capture window; YARG claimed
+  0 devices ("registered devices: 0") and the profile list read threw
+  TargetInvocationException (inner reason now unwrapped in v1.3.6).
+  => OS + InputSystem layers healthy; the failure layer is YARG's claim/profile
+  matching. F6 remains the tool; bindings.json still requested.
+- Kernel32 LoadLibrary XInput chain WORKED this run (slots 0-3 CONNECTED, packet=0
+  idle) - the v1.3.5 Mono-safe rewrite is confirmed good on the user's Win11.
+- Session crashed NATIVELY ~10 s in (log ends abruptly, no managed exception) right
+  after the guitar produced its first events and while the 5 s onEvent capture was
+  subscribed. The onEvent hook was the only v1.3.5 code touching the input pipeline
+  at event frequency => removed entirely in v1.3.6. Replacement: passive 5 s
+  activity window comparing InputDevice.lastUpdateTime per device (plain field
+  reads; cannot interfere with input processing). If crashes persist, Player.log
+  (%USERPROFILE%\AppData\LocalLow\YARC\YARG\Player.log) holds the native stack and
+  will name the culprit (mod vs Unity GameInput backend vs YARG).
+
+UI doubling root cause + fix:
+- Eye cameras rendered a SYMMETRIC vFOV (OpenVR-derived 98 deg) while SteamVR lenses
+  display the per-eye ASYMMETRIC frusta (temple side wider). Submitting the symmetric
+  render full-bounds lands each eye's image horizontally shifted - perceived as the
+  two UI copies not lining up ("they need to move inward a bit more to each other").
+- Fix: OpenVrRuntime.TryGetEyeProjectionRaw wraps CVRSystem.GetProjectionRaw
+  (tan-half-angle space, convention-independent); VrSceneRig.ApplyOpenVrEyeProjections
+  builds Matrix4x4.Frustum(l*n, r*n, b*n, t*n, 0.01, 50) per eye (GL depth convention;
+  Unity converts per platform). Gated by OpenVrProjection pref (default ON), skipped
+  when HudFov > 1 (explicit user override). Fallback = legacy symmetric FOV.
+- Residual true-depth disparity remains user-tunable: [ / ] hotkeys step ScreenStereo
+  by 0.1 (0..1, saved, instant effect). NOTE: this InputSystem version's Key enum has
+  LeftBracket/RightBracket (NOT BracketLeft/BracketRight); cfg defaults use the
+  parseable names.
+
+Menu visualizer fix:
+- v1.3.3 occlusion only hid bars whose head->bar ray crosses a screen rect; in the
+  menu the bars AROUND the screen (in front of the menu background) stayed visible
+  ("blocking the main menu"), while gameplay looked right. v1.3.6: while the
+  MainMenuBackground component exists (menu context, re-detected every ~2 s rescan)
+  the ring is hidden entirely when VisualizerOcclusion is on; gameplay keeps the
+  through-screen occlusion unchanged.
+
+Build: 0 warnings / 0 errors; DLL 364,032 B; UTF-16/UTF-8 marker verification passed
+(1.3.6 init, activity window lines, projection line, menu-context lines, Screen
+stereo depth, pref names); v1.3.5 markers absent.

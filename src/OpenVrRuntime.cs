@@ -426,6 +426,65 @@ namespace YargVr
             }
         }
 
+        /// <summary>
+        /// v1.3.6: per-eye frustum extents in tan-half-angle space (OpenVR's GetProjectionRaw).
+        /// These are convention-independent raw tangents of the eye's ACTUAL view volume -
+        /// including the per-eye asymmetry (each eye sees further toward the temple than
+        /// toward the nose). Building the eye cameras' projection from these (instead of a
+        /// symmetric FOV) makes the rendered image match the lenses exactly; a symmetric
+        /// render submitted full-bounds lands shifted per eye, which the user perceives as
+        /// the two eye images not lining up - "the UI needs to move inward to stop doubling".
+        /// </summary>
+        public static bool TryGetEyeProjectionRaw(EVREye eye, out float left, out float right,
+            out float top, out float bottom)
+        {
+            left = right = top = bottom = 0f;
+            if (!_initialized || _system == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                _system.GetProjectionRaw(eye, ref left, ref right, ref top, ref bottom);
+
+                // v1.3.15: the user's runtime (an OpenXR bridge) reports top/bottom with
+                // INVERTED signs (raw t=-1.19, b=+1.11) - the magnitudes sit in the correct
+                // slots, only the sign convention is broken. The old check (top > bottom)
+                // rejected those values FOREVER, locking the rig onto the symmetric-FOV
+                // fallback with a retry every 1 s (the standing "ss=8.4 sweet spot means
+                // the projection path never engages" investigation). Restore the OpenVR
+                // convention (top>0, bottom<0); log the correction once per session.
+                if (top < 0f && bottom > 0f)
+                {
+                    top = -top;
+                    bottom = -bottom;
+                    if (!_projRawNormalizedLogged)
+                    {
+                        _projRawNormalizedLogged = true;
+                        MelonLoader.MelonLogger.Msg("[YARG-VR] OpenVR raw projection top/bottom had inverted signs " +
+                            "(OpenXR-bridge quirk) - normalized to the OpenVR convention; per-eye frusta can now engage.");
+                    }
+                }
+
+                return right > left && top > bottom &&
+                       Mathf.Abs(right - left) > 0.0001f && Mathf.Abs(top - bottom) > 0.0001f;
+            }
+            catch (Exception e)
+            {
+                if (!_projRawFailedLogged)
+                {
+                    _projRawFailedLogged = true;
+                    MelonLoader.MelonLogger.Warning("[YARG-VR] GetProjectionRaw failed (" + e.Message +
+                        ") - falling back to the symmetric eye FOV.");
+                }
+                return false;
+            }
+        }
+
+        private static bool _projRawFailedLogged;
+        private static bool _projRawNormalizedLogged;
+
         /// <summary>Logs a pose problem, but at most once per ~30 s for an identical message.</summary>
         private static void LogPoseProblem(string message)
         {
