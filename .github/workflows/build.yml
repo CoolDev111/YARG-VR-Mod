@@ -60,16 +60,16 @@ jobs:
             echo "YARG-VR v${{ github.ref_name }} (built against YARG v${{ env.YARG_VERSION }})"
             echo ""
             echo "Install:"
-            echo "  1. Install MelonLoader (https://melonwiki.xyz/) into your YARG folder."
+            echo "  1. Install MelonLoader (https://melonloader.co/) into your YARG folder."
             echo "  2. Copy BOTH files below into  <YARG>/Mods/"
             echo "       YARG-VR.dll"
             echo "       openvr_api.dll"
-            echo "  3. Start SteamVR (or let the mod start it), then launch YARG."
+            echo "  3. Start YARG and connect an instrument, then launch SteamVR."
             echo "  4. In-game hotkeys: F8 = toggle VR, F9 = recenter."
             echo ""
-            echo "See the project README.md for settings and troubleshooting."
           } > dist/YARG-VR/INSTALL.txt
-          zip -r YARG-VR-${{ github.ref_name }}.zip YARG-VR
+          cd dist
+          zip -r ../YARG-VR-${{ github.ref_name }}.zip YARG-VR
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

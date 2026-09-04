@@ -3,8 +3,6 @@
 **Play** [**YARG**](https://yarg.in) **(Yet Another Rhythm Game) in VR — with SteamVR (OpenVR) + MelonLoader,
 by touching nothing but the game's cameras.**
 
-# **Releases are expected to come soon, make sure to stay tuned!**
-
 YARG-VR is a [MelonLoader](https://melonloader.co/) mod. It does not modify YARG's assets, code, or
 render pipeline. It takes over the game's **venue camera** 1:1 with your headset (6-DOF, look around
 the stage mid-song), turns the gameplay UI (HUD, highways, pause menu) into a **world-space stereo
