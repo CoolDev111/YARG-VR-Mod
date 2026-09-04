@@ -11,8 +11,8 @@ the stage mid-song), turns the gameplay UI (HUD, highways, pause menu) into a **
 screen** floating in your play space, and submits **per-eye stereo textures** to the **SteamVR
 compositor**.
 
-> Works against \*\*YARG v0.15.0\*\* (latest release at build time) — and is built to degrade
-> gracefully on newer versions. See \[`RESEARCH.md`](./RESEARCH.md) for the full behind-the-scenes
+> Works against **YARG v0.15.0** (latest release at build time) — and is built to degrade
+> gracefully on newer versions. See [`RESEARCH.md`](./RESEARCH.md) for the full behind-the-scenes
 > research on how the game renders everything and why this mod is possible at all.
 
 ## Requirements
